@@ -15,8 +15,8 @@
 # ===============================================================================
 
 
-""" invdisttree.py: inverse-distance-weighted interpolation using KDTree
-    fast, solid, local
+"""invdisttree.py: inverse-distance-weighted interpolation using KDTree
+fast, solid, local
 """
 import numpy as np
 from scipy.spatial import cKDTree as KDTree

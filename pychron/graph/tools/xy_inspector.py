@@ -15,7 +15,7 @@
 # ===============================================================================
 
 """
-    modified from chaco.image_inspector
+modified from chaco.image_inspector
 """
 # ============= enthought library imports =======================
 from __future__ import absolute_import

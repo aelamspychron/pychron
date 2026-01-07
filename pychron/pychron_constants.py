@@ -62,7 +62,7 @@ TTF_FONTS = [
 FONTS = TTF_FONTS
 SIZES = [10, 6, 8, 9, 10, 11, 12, 14, 15, 18, 24, 36]
 
-LAMBDA = "\u03BB"
+LAMBDA = "\u03bb"
 PLUSMINUS = "\u00b1"
 SIGMA = "\u03c3"  # greek small letter sigma
 DELTA = "\u0394"  # greek capital letter delta

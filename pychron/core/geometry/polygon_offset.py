@@ -14,7 +14,7 @@
 # limitations under the License.
 # ===============================================================================
 """
-    http://pyright.blogspot.ch/2011/07/pyeuclid-vector-math-and-polygon-offset.html
+http://pyright.blogspot.ch/2011/07/pyeuclid-vector-math-and-polygon-offset.html
 """
 # ============= enthought library imports =======================
 # ============= standard library imports ========================

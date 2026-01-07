@@ -18,7 +18,7 @@
 # ============= standard library imports ========================
 # ============= local library imports  ==========================
 """
-    http://code.activestate.com/recipes/391367-deprecated/
+http://code.activestate.com/recipes/391367-deprecated/
 """
 
 from __future__ import absolute_import

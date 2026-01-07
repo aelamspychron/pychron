@@ -17,8 +17,8 @@ from pychron.hardware.core.communicators.serial_communicator import SerialCommun
 from pychron.hardware.core.core_device import CoreDevice
 
 STX = "5B"
-ACK = b"\xAA"
-NAK = b"\x3F"
+ACK = b"\xaa"
+NAK = b"\x3f"
 
 
 def is_ack(resp):

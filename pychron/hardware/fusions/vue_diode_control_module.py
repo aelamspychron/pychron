@@ -16,7 +16,7 @@
 
 
 """
-Vue Metrix Vue-TEC controller 
+Vue Metrix Vue-TEC controller
 see http://www.vuemetrix.com/support/tech/tec_commands.html
 """
 # =============enthought library imports=======================

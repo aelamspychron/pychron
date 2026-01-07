@@ -16,10 +16,10 @@
 
 # ============= enthought library imports =======================
 """
-    the GeoEditor will not work in current setup
+the GeoEditor will not work in current setup
 
-    cannot use gui elements from qgis in pychron
-    pychron uses pyside, qgis uses pyqt4
+cannot use gui elements from qgis in pychron
+pychron uses pyside, qgis uses pyqt4
 
 """
 from __future__ import absolute_import

@@ -637,7 +637,7 @@ def calculate_error_t(F, ssF, j, ssJ):
     JJ = j * j
     FF = F * F
     constants = ArArConstants()
-    ll = constants().lambdak.nominal_value ** 2
+    ll = constants().lambdak.nominal_value**2
     sst = (JJ * ssF + FF * ssJ) / (ll * (1 + F * j) ** 2)
     return sst**0.5
 
