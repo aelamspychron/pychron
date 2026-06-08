@@ -14,7 +14,17 @@
 # limitations under the License.
 # ===============================================================================
 from __future__ import absolute_import
-from traitsui.api import Group, Item, UItem, HGroup, VGroup, spring, Spring, Label
+from traitsui.api import (
+    Group,
+    Item,
+    UItem,
+    HGroup,
+    VGroup,
+    spring,
+    Spring,
+    Label,
+    RangeEditor,
+)
 from traits.api import Float, Int
 
 from pychron.core.ui.lcd_editor import LCDEditor
@@ -22,12 +32,18 @@ from pychron.hardware.lakeshore.base_controller import BaseLakeShoreController
 
 
 class Model336TemperatureController(BaseLakeShoreController):
+    num_outputs = 4
     input_c = Float
     input_d = Float
     setpoint3 = Float(auto_set=False, enter_set=True)
     setpoint3_readback = Float
     setpoint4 = Float(auto_set=False, enter_set=True)
     setpoint4_readback = Float
+
+    setpoint3_min = Float(float("-inf"))
+    setpoint3_max = Float(float("inf"))
+    setpoint4_min = Float(float("-inf"))
+    setpoint4_max = Float(float("inf"))
 
     def read_input_c(self, **kw):
         return self._read_input("c", self.units, **kw)
@@ -49,7 +65,14 @@ class Model336TemperatureController(BaseLakeShoreController):
             contents = []
             if self.iomap[i] is not None:
                 contents = [
-                    Item("{}".format(self.iomap[i])),
+                    Item(
+                        "{}".format(self.iomap[i]),
+                        editor=RangeEditor(
+                            low_name="{}_min".format(self.iomap[i]),
+                            high_name="{}_max".format(self.iomap[i]),
+                            mode="text",
+                        ),
+                    ),
                     UItem(
                         "{}_readback".format(self.iomap[i]),
                         editor=LCDEditor(width=120, height=30),

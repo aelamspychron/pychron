@@ -15,7 +15,7 @@
 # ===============================================================================
 import string
 from traits.api import Float
-from traitsui.api import VGroup, Item, UItem
+from traitsui.api import VGroup, Item, UItem, RangeEditor
 
 from pychron.core.ui.lcd_editor import LCDEditor
 from pychron.hardware import get_float
@@ -39,7 +39,10 @@ class SI9700Controller(BaseCryoController):
         return True
 
     def set_setpoints(self, *setpoints, block=False, delay=1):
-        self.ask(f"SET {setpoints[0]}")
+        v = self._validate_setpoint(setpoints[0])
+        if v is None:
+            return
+        self.ask(f"SET {v}")
 
     def _write_setpoint(self, v, *args, **kw):
         self.ask(f"SET {v}")
@@ -63,7 +66,14 @@ class SI9700Controller(BaseCryoController):
 
     def get_control_group(self):
         grp = VGroup(
-            Item("setpoint"),
+            Item(
+                "setpoint",
+                editor=RangeEditor(
+                    low_name="setpoint_min",
+                    high_name="setpoint_max",
+                    mode="text",
+                ),
+            ),
             UItem(
                 "readback",
                 editor=LCDEditor(width=120, height=30),

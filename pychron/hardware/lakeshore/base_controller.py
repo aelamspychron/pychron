@@ -15,7 +15,7 @@
 # ===============================================================================
 
 from traits.api import Enum, Float, Property, List, Int, Bool
-from traitsui.api import Item, UItem, HGroup, VGroup, Spring
+from traitsui.api import Item, UItem, HGroup, VGroup, Spring, RangeEditor
 
 from pychron.core.pychron_traits import BorderVGroup
 from pychron.core.ui.lcd_editor import LCDEditor
@@ -118,6 +118,13 @@ class BaseLakeShoreController(BaseCryoController):
     setpoint1_readback = Float
     setpoint2 = Float(auto_set=False, enter_set=True)
     setpoint2_readback = Float
+
+    # per-channel setpoint limits. default permissive, overwritten in load
+    num_outputs = 2
+    setpoint1_min = Float(float("-inf"))
+    setpoint1_max = Float(float("inf"))
+    setpoint2_min = Float(float("-inf"))
+    setpoint2_max = Float(float("inf"))
     range_tests = List
     num_inputs = Int
     ionames = List
@@ -131,7 +138,46 @@ class BaseLakeShoreController(BaseCryoController):
     protocol_kind = Enum("GPIB", "SCPI")
     protocol = None
 
+    def _load_setpoint_limits(self, config):
+        # [Setpoint]
+        # min=0          ; global default for all outputs
+        # max=325
+        # 1_min=0        ; per-output overrides (optional)
+        # 1_max=100
+        # 2_min=50
+        # 2_max=325
+        super()._load_setpoint_limits(config)
+        for i in range(1, self.num_outputs + 1):
+            self.set_attribute(
+                config,
+                "setpoint{}_min".format(i),
+                "Setpoint",
+                "{}_min".format(i),
+                cast="float",
+                optional=True,
+                default=self.setpoint_min,
+            )
+            self.set_attribute(
+                config,
+                "setpoint{}_max".format(i),
+                "Setpoint",
+                "{}_max".format(i),
+                cast="float",
+                optional=True,
+                default=self.setpoint_max,
+            )
+
+    def _setpoint_limits(self, output=1):
+        try:
+            output = int(re.sub("[^0-9]", "", str(output)))
+        except (TypeError, ValueError):
+            output = 1
+        lo = getattr(self, "setpoint{}_min".format(output), self.setpoint_min)
+        hi = getattr(self, "setpoint{}_max".format(output), self.setpoint_max)
+        return lo, hi
+
     def load_additional_args(self, config):
+        self._load_setpoint_limits(config)
         self.set_attribute(config, "units", "General", "units", default="K")
         self.set_attribute(
             config,
@@ -259,6 +305,10 @@ class BaseLakeShoreController(BaseCryoController):
         self.protocol.set_setpoint(output, v, **kw)
 
     def set_setpoint(self, v, output=1, retries=3):
+        v = self._validate_setpoint(v, output)
+        if v is None:
+            return
+
         self.set_range(v, output)
         super().set_setpoint(v, output, retries)
         # for i in range(retries):
@@ -326,7 +376,14 @@ class BaseLakeShoreController(BaseCryoController):
                     style="readonly",
                     editor=LCDEditor(width=120, ndigits=6, height=30),
                 ),
-                Item("setpoint1"),
+                Item(
+                    "setpoint1",
+                    editor=RangeEditor(
+                        low_name="setpoint1_min",
+                        high_name="setpoint1_max",
+                        mode="text",
+                    ),
+                ),
                 UItem(
                     "setpoint1_readback",
                     editor=LCDEditor(width=120, height=30),
@@ -341,7 +398,14 @@ class BaseLakeShoreController(BaseCryoController):
                     style="readonly",
                     editor=LCDEditor(width=120, ndigits=6, height=30),
                 ),
-                Item("setpoint2"),
+                Item(
+                    "setpoint2",
+                    editor=RangeEditor(
+                        low_name="setpoint2_min",
+                        high_name="setpoint2_max",
+                        mode="text",
+                    ),
+                ),
                 UItem(
                     "setpoint2_readback",
                     editor=LCDEditor(width=120, height=30),

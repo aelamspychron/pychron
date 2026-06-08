@@ -14,7 +14,7 @@
 # limitations under the License.
 # ===============================================================================
 
-from traitsui.api import Item, UItem, HGroup, VGroup, Spring
+from traitsui.api import Item, UItem, HGroup, VGroup, Spring, RangeEditor
 
 from pychron.core.ui.lcd_editor import LCDEditor
 from pychron.hardware.lakeshore.base_controller import BaseLakeShoreController
@@ -68,7 +68,14 @@ class Model330TemperatureController(BaseLakeShoreController):
                     style="readonly",
                     editor=LCDEditor(width=120, ndigits=6, height=30),
                 ),
-                Item("setpoint1"),
+                Item(
+                    "setpoint1",
+                    editor=RangeEditor(
+                        low_name="setpoint1_min",
+                        high_name="setpoint1_max",
+                        mode="text",
+                    ),
+                ),
                 UItem(
                     "setpoint1_readback",
                     editor=LCDEditor(width=120, height=30),
