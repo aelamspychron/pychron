@@ -196,9 +196,7 @@ class BaseLakeShoreController(BaseCryoController):
             cast="boolean",
         )
 
-        self.set_attribute(
-            config, "protocol_kind", "Communications", "protocol", default="GPIB"
-        )
+        self.set_attribute(config, "protocol_kind", "Communications", "protocol", default="GPIB")
         self.set_attribute(
             config,
             "verify_setpoint",

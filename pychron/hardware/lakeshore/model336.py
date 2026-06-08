@@ -89,7 +89,7 @@ class Model336TemperatureController(BaseLakeShoreController):
                         style="readonly",
                         editor=LCDEditor(width=120, ndigits=6, height=30),
                     ),
-                    *contents
+                    *contents,
                 ),
             )
             items.append(h)
