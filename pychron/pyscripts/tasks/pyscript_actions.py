@@ -32,10 +32,13 @@ class HopsEditorAction(Action):
             "pychron.spectrometer.spectrometer_manager.SpectrometerManager"
         )
         dets = []
+        configurations = []
         if spec:
             dets = [di.name for di in spec.spectrometer.detectors]
+            # blank entry lets a hop keep the current configuration
+            configurations = [""] + list(spec.spectrometer.spectrometer_configurations)
 
-        m = HopEditorModel(detectors=dets)
+        m = HopEditorModel(detectors=dets, configurations=configurations)
         h = HopEditorView(model=m)
         if self._perform(m):
             h.edit_traits(kind="livemodal")

@@ -213,7 +213,7 @@ class PeakHopYamlCase1(PeakHopYamlCase):
         hop = self.hop1()
         self.assertEqual(hop["detectors"], ["H1", "AX", "CDD"])
 
-    def test_hop1_detectors(self):
+    def test_hop1_isotopes(self):
         hop = self.hop1()
         self.assertEqual(hop["isotopes"], ["Ar40", "Ar39", "Ar36"])
 
@@ -229,9 +229,49 @@ class PeakHopYamlCase1(PeakHopYamlCase):
         hop = self.hop2()
         self.assertEqual(hop["detectors"], ["CDD"])
 
-    def test_hop2_detectors(self):
+    def test_hop2_isotopes(self):
         hop = self.hop2()
         self.assertEqual(hop["isotopes"], ["Ar37"])
+
+
+class PeakHopConfigurationCase(PeakHopYamlCase):
+    txt = """- counts: 2
+  settle: 1
+  configuration: argon_2CDD
+  cup_configuration:
+    - isotope: Ar40
+      active: True
+      deflection: 0
+      detector: H2
+      protect: False
+      is_baseline: False
+  positioning:
+    detector: H2
+    isotope: Ar40
+- counts: 3
+  settle: 1
+  cup_configuration:
+    - isotope: Ar39
+      active: True
+      deflection: 0
+      detector: H1
+      protect: False
+      is_baseline: False
+  positioning:
+    detector: H1
+    isotope: Ar39
+"""
+
+    def test_hop1_configuration(self):
+        hop = self.hop1()
+        self.assertEqual(hop["configuration"], "argon_2CDD")
+
+    def test_hop2_configuration_default_none(self):
+        # second hop omits configuration -> None
+        next(self.gen)  # hop1 count0
+        next(self.gen)  # hop1 count1
+        hop = next(self.gen)  # hop2 count0
+        self.assertIsNone(hop["configuration"])
 
 
 class PeakHopTxtCase(unittest.TestCase):
