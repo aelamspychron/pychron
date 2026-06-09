@@ -57,7 +57,6 @@ from pychron.experiment.automated_run.hop_util import split_hopstr
 from pychron.loggable import Loggable
 from pychron.paths import paths
 
-
 # class NullInt(Int):
 #     default_value = None
 
@@ -98,7 +97,9 @@ class Hop(HasTraits):
     settle = Int
     isotope_label = Str
     name = Str
-    detectors = List(["A", "B"])
+    detectors = List(Str, ["A", "B"])
+    configuration = Str
+    configurations = List
     add_position_button = Button
     remove_position_button = Button
     selected = Any
@@ -107,15 +108,15 @@ class Hop(HasTraits):
     def to_string(self):
         vs = [str(self.counts), str(self.settle)]
         hs = "'{}'".format(
-            ", ".join(
-                [p.to_string() for p in self.positions if p.isotope and p.detector]
-            )
+            ", ".join([p.to_string() for p in self.positions if p.isotope and p.detector])
         )
 
         return "({}, {})".format(hs, ", ".join(vs))
 
     def to_yaml(self):
         obj = {"counts": self.counts, "settle": self.settle}
+        if self.configuration:
+            obj["configuration"] = self.configuration
         poss = [p for p in self.positions if p.isotope and p.detector]
         if poss:
             obj["cup_configuration"] = [p.to_yaml() for p in poss]
@@ -202,6 +203,13 @@ class Hop(HasTraits):
                         tooltip="Delay in seconds after magnet move and before measurement",
                     ),
                 ),
+                Item(
+                    "configuration",
+                    label="Spec. Config",
+                    editor=EnumEditor(name="configurations"),
+                    tooltip="Spectrometer configuration to apply for this hop. "
+                    "Leave blank to keep the current configuration",
+                ),
                 UItem(
                     "positions",
                     editor=myTableEditor(
@@ -231,6 +239,8 @@ class Hop(HasTraits):
 
 class HopSequence(HasTraits):
     hops = List
+    detectors = List
+    configurations = List
 
     def to_string(self):
         return "\n".join([hi.to_string() for hi in self.hops])
@@ -244,7 +254,7 @@ class HopSequence(HasTraits):
             hh = h.clone_traits()
             self.hops.insert(idx, hh)
         else:
-            h = Hop()
+            h = Hop(detectors=self.detectors, configurations=self.configurations)
             self.hops.append(h)
 
         self._label_hops()
@@ -269,6 +279,7 @@ class HopEditorModel(Loggable):
     selected = Any
     path = Str
     detectors = List
+    configurations = List
     add_hop_button = Button
     remove_hop_button = Button
     # saveable = Bool
@@ -278,7 +289,9 @@ class HopEditorModel(Loggable):
     use_yaml = True
 
     def new(self):
-        self.hop_sequence = HopSequence()
+        self.hop_sequence = HopSequence(
+            detectors=self.detectors, configurations=self.configurations
+        )
         return True
 
     def open(self, p=None):
@@ -314,7 +327,9 @@ class HopEditorModel(Loggable):
                 self.path = p
 
     def _load(self, p):
-        self.hop_sequence = hs = HopSequence()
+        self.hop_sequence = hs = HopSequence(
+            detectors=self.detectors, configurations=self.configurations
+        )
         if p.endswith(".txt"):
             self.use_yaml = False
             with open(p, "r") as rfile:
@@ -326,6 +341,7 @@ class HopEditorModel(Loggable):
                         counts=cnt,
                         settle=settle,
                         detectors=self.detectors,
+                        configurations=self.configurations,
                     )
                     h.parse_hopstr(hopstr)
                     hs.hops.append(h)
@@ -346,8 +362,10 @@ class HopEditorModel(Loggable):
                             counts=hop.get("counts", 0),
                             settle=hop.get("settle", 0),
                             detectors=self.detectors,
+                            configurations=self.configurations,
+                            configuration=hop.get("configuration", ""),
                         )
-                        for p in hop.get("cup_configurations"):
+                        for p in hop.get("cup_configuration", []):
                             pos = Position(
                                 detector=p.get("detector", ""),
                                 isotope=p.get("isotope", ""),
@@ -447,7 +465,7 @@ class HopEditorView(Controller):
         return True
 
     @on_trait_change(
-        "model:hop_sequence:hops:[counts,settle, positions:[isotope,detector,deflection]]"
+        "model:hop_sequence:hops:[counts,settle,configuration, positions:[isotope,detector,deflection]]"
     )
     def _handle_edit(self):
         self.model.dirty = True
@@ -480,9 +498,8 @@ class HopEditorView(Controller):
             ObjectColumn(name="name", label="", editable=False),
             ObjectColumn(name="counts"),
             ObjectColumn(name="settle", label="Settle (s)"),
-            ObjectColumn(
-                name="isotopes_label", editable=False, width=175, label="Isotopes"
-            ),
+            ObjectColumn(name="configuration", label="Config", editable=False),
+            ObjectColumn(name="isotopes_label", editable=False, width=175, label="Isotopes"),
         ]
 
         hgrp = VGroup(
@@ -532,9 +549,7 @@ class HopEditorView(Controller):
         v = View(
             VGroup(
                 VGroup(grp, label="Editor"),
-                VGroup(
-                    UItem("object.text", editor=teditor, style="custom"), label="Text"
-                ),
+                VGroup(UItem("object.text", editor=teditor, style="custom"), label="Text"),
             ),
             # toolbar=ToolBar(),
             width=690,
@@ -549,7 +564,7 @@ if __name__ == "__main__":
     root = os.path.join(os.path.expanduser("~"), "PychronDev")
     paths.build(root)
     m = HopEditorModel()
-    m.detectors = ["H2", "H1", "CDD"]
+    m.detectors = ["H2", "H1", "CDD"]  # type: ignore[assignment]
     # m.open()
     m.new()
     h = HopEditorView(model=m)

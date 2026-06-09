@@ -32,6 +32,7 @@ def parse_hop(args):
         is_baselines = [ci.get("is_baseline", False) for ci in cc]
         active_detectors = [ci["detector"] for ci in cc if ci.get("active", False)]
         pos = args["positioning"]
+        configuration = args.get("configuration")
 
     else:
         if len(args) == 3:
@@ -43,6 +44,7 @@ def parse_hop(args):
         is_baselines, isos, dets, defls = list(zip(*split_hopstr(hopstr)))
         active_detectors = dets
         pos = {"detector": active_detectors[0], "isotope": isos[0]}
+        configuration = None
 
     d = {
         "is_baselines": is_baselines,
@@ -54,6 +56,7 @@ def parse_hop(args):
         "counts": counts,
         "protect_detectors": pdets,
         "positioning": pos,
+        "configuration": configuration,
     }
 
     return d

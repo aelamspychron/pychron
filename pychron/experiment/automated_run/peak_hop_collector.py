@@ -16,11 +16,21 @@
 
 # ============= enthought library imports =======================
 from __future__ import absolute_import
+import os
+from configparser import ConfigParser, Error as ConfigParserError
+
 from traits.api import List, Int, Instance
 
 from pychron.core.helpers.color_generators import colornames
+from pychron.core.helpers.filetools import add_extension
 from pychron.experiment.automated_run.data_collector import DataCollector
 from pychron.experiment.automated_run.hop_util import generate_hops
+from pychron.pychron_constants import FAILED
+from pychron.spectrometer import (
+    get_spectrometer_config_name,
+    get_spectrometer_config_path,
+    set_spectrometer_config_name,
+)
 from six.moves import zip
 
 
@@ -35,13 +45,91 @@ class PeakHopCollector(DataCollector):
     ncycles = Int
     hop_generator = None
 
+    # seconds to wait after a spectrometer configuration change for source
+    # parameters (HV, trap, deflections) to settle before measuring
+    configuration_settle = Int(3)
+
     _was_deflected = False
     _detectors = None
+    _current_configuration = None
+    _original_configuration = None
 
     def set_hops(self, hops):
         self.hops = hops
         self.debug("make new hop generatior")
         self.hop_generator = generate_hops(self.hops)
+
+    def measure(self):
+        # validate every hop's spectrometer configuration before starting.
+        # abort the run on an unknown configuration rather than failing mid-hop.
+        if not self._validate_configurations():
+            self.canceled = True
+            if self.automated_run is not None:
+                self.automated_run.cancel_run(state=FAILED, do_post_equilibration=False)
+            return
+
+        # remember the active configuration. each hop must set its configuration
+        # explicitly; a hop without one rolls back to this original. the original
+        # is also restored after the peak hop so the change doesn't leak into
+        # subsequent runs/manual use.
+        self._original_configuration = get_spectrometer_config_name()
+        self._current_configuration = self._original_configuration
+        try:
+            return super(PeakHopCollector, self).measure()
+        finally:
+            self._restore_configuration()
+
+    @staticmethod
+    def _norm_configuration(name):
+        return os.path.splitext(name)[0] if name else ""
+
+    def _validate_configurations(self):
+        """Return True if every hop's spectrometer configuration is available.
+
+        Hops without a configuration are ignored. When no spectrometer is
+        present (e.g. tests) validation is skipped.
+        """
+        spec = None
+        arun = self.automated_run
+        if arun is not None and arun.spectrometer_manager:
+            spec = arun.spectrometer_manager.spectrometer
+
+        available = set(spec.spectrometer_configurations) if spec else set()
+        if not available:
+            return True
+
+        invalid = []
+        for args in self.hops:
+            name = args.get("configuration") if isinstance(args, dict) else None
+            if name:
+                base = os.path.splitext(name)[0]
+                if base not in available:
+                    invalid.append(name)
+
+        if invalid:
+            self.warning_dialog(
+                "Unknown spectrometer configuration(s) in peak hop: {}\n\n"
+                "Available configurations: {}".format(
+                    ", ".join(sorted(set(invalid))), ", ".join(sorted(available))
+                )
+            )
+            return False
+
+        return True
+
+    def _restore_configuration(self):
+        """Restore the spectrometer configuration active before the peak hop.
+
+        No-op when the current configuration already matches the original.
+        """
+        name = self._original_configuration
+        if name is None:
+            return
+        if self._norm_configuration(self._current_configuration) == self._norm_configuration(name):
+            return
+
+        self.info("restoring spectrometer configuration '{}'".format(name))
+        self._send_configuration(name)
 
     def _pre_trigger_hook(self):
         args = self._do_hop()
@@ -99,6 +187,12 @@ class PeakHopCollector(DataCollector):
             self.debug("$$$$$$$$$$$$$$$$$ SETTING is_baseline {}".format(is_baseline))
 
         arun = self.automated_run
+
+        # apply this hop's spectrometer configuration before positioning/deflecting.
+        # a hop without a configuration rolls back to the original. only re-sends
+        # when the target configuration differs from the current one.
+        self._set_configuration(hop.get("configuration"))
+
         if is_baseline:
             arun.is_peak_hop = False
             # remember original settings. return to these values after baseline finished
@@ -124,9 +218,7 @@ class PeakHopCollector(DataCollector):
                 remove_non_active=False,
             )
             if change:
-                msg = "delaying {} for detectors to settle after peak hop".format(
-                    settle
-                )
+                msg = "delaying {} for detectors to settle after peak hop".format(settle)
                 arun.wait(settle, msg)
                 self.debug(msg)
             self._protect_detectors(pdets, False)
@@ -168,9 +260,7 @@ class PeakHopCollector(DataCollector):
                             arun.set_deflection(det, defl)
 
                 self._protect_detectors(pdets)
-                self.debug(
-                    "----------------------- HOP {} {}".format(isotope, detector)
-                )
+                self.debug("----------------------- HOP {} {}".format(isotope, detector))
                 change = arun.set_magnet_position(
                     isotope,
                     detector,
@@ -190,33 +280,23 @@ class PeakHopCollector(DataCollector):
                         for d in active_dets:
                             det = arun.get_detector(d)
 
-                            plot = g.get_plot_by_ytitle(
-                                "{}{}".format(det.isotope, det.name)
-                            )
+                            plot = g.get_plot_by_ytitle("{}{}".format(det.isotope, det.name))
                             if not plot:
                                 plot = g.get_plot_by_ytitle(det.isotope)
 
                             if plot:
-                                scatter = plot.plots[
-                                    "data{}".format(self.fit_series_idx)
-                                ][0]
+                                scatter = plot.plots["data{}".format(self.fit_series_idx)][0]
                                 scatter.color = current_color
                                 scatter.outline_color = current_color
                             else:
-                                self.debug(
-                                    "could not locate det={} iso={}".format(
-                                        d, det.isotope
-                                    )
-                                )
+                                self.debug("could not locate det={} iso={}".format(d, det.isotope))
 
                     try:
                         arun.plot_panel.counts += int(settle)
                     except AttributeError:
                         pass
 
-                    msg = "delaying {} for detectors to settle after peak hop".format(
-                        settle
-                    )
+                    msg = "delaying {} for detectors to settle after peak hop".format(settle)
                     arun.wait(settle, msg)
                     self.debug(msg)
 
@@ -236,6 +316,76 @@ class PeakHopCollector(DataCollector):
                 current_color=current_color,
             )
         return is_baseline, active_dets, isos
+
+    def _set_configuration(self, name):
+        """Apply this hop's spectrometer configuration.
+
+        A hop must set its configuration explicitly; when ``name`` is empty the
+        configuration rolls back to the original active at the start of the peak
+        hop. No-op when the target already matches the current configuration.
+        """
+        target = name or self._original_configuration
+        if not target or self._norm_configuration(target) == self._norm_configuration(
+            self._current_configuration
+        ):
+            return
+
+        self.info("setting spectrometer configuration '{}'".format(target))
+        self._send_configuration(target)
+
+    def _send_configuration(self, name):
+        set_spectrometer_config_name(name)
+        arun = self.automated_run
+        try:
+            arun.py_clear_cached_configuration()
+            arun.py_send_spectrometer_configuration()
+        except BaseException as e:
+            self.warning("failed sending spectrometer configuration '{}': {}".format(name, e))
+            return
+
+        self._current_configuration = name
+
+        # the configuration's mftable takes precedence over the peak_hop-level
+        # mftable. apply it explicitly here so this holds on every spectrometer
+        # driver (e.g. the isotopx send_configuration is a no-op).
+        self._apply_configuration_mftable(name)
+
+        settle = self.configuration_settle
+        if settle:
+            msg = "delaying {} for spectrometer to settle after " "configuration change".format(
+                settle
+            )
+            self.debug(msg)
+            arun.wait(settle, msg)
+
+    def _apply_configuration_mftable(self, name):
+        """Apply the mftable declared in the configuration, if any.
+
+        Makes the configuration's mftable win over the peak_hop-level mftable
+        regardless of spectrometer driver.
+        """
+        mftable = self._configuration_mftable(name)
+        if not mftable:
+            return
+
+        self.info("configuration '{}' mftable '{}' takes precedence".format(name, mftable))
+        self.automated_run.ion_optics_manager.set_mftable(mftable)
+
+    def _configuration_mftable(self, name):
+        """Read [Magnet] mftable from the configuration file. None if absent."""
+        p = get_spectrometer_config_path(add_extension(name, ".cfg"))
+        if not p or not os.path.isfile(p):
+            return
+
+        config = ConfigParser()
+        try:
+            config.read(p)
+        except (OSError, ConfigParserError):
+            self.warning("failed reading configuration '{}'".format(p))
+            return
+
+        if config.has_option("Magnet", "mftable"):
+            return config.get("Magnet", "mftable")
 
     def _protect_detectors(self, pdets, protect=True):
         for pd in pdets:
