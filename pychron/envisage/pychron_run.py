@@ -301,8 +301,9 @@ def launch(klass):
     #         return
 
     # Register signal handler for SIGBUS (bus error, signal 10) to gracefully quit
-    # instead of crashing
-    signal.signal(signal.SIGBUS, _handle_bus_error)
+    # instead of crashing. SIGBUS does not exist on Windows.
+    if hasattr(signal, "SIGBUS"):
+        signal.signal(signal.SIGBUS, _handle_bus_error)
 
     app = app_factory(klass)
     try:
