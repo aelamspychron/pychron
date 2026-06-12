@@ -256,12 +256,13 @@ class ExtractionPyScript(AutomatedRunPyScript):
 
     @verbose_skip
     @command_register
-    def set_cryo(self, value, device_name=None, block=False, delay=1):
+    def set_cryo(self, value, value2=None, device_name=None, block=False, delay=1):
         """
         Set the cryotrap to setpoint `value` in degrees K.
 
         Args:
             value (`float,int`): Setpoint in degrees K
+            value2 (`float,int`, optional): Setpoint 2 in degrees K
             block (`bool,float,int`, optional): If `True` command is blocking, i.e. the command will not return
                 until setpoint reached. If `block` is a number than block until `block>abs(current_temp-setpoint)`
             delay (`float,int`): Delay in seconds between each check to determine if blocking is complete.
@@ -271,7 +272,7 @@ class ExtractionPyScript(AutomatedRunPyScript):
         result = self._manager_action(
             (
                 "set_cryo",
-                (value,),
+                (value, value2),
                 {"block": block, "device_name": device_name, "delay": delay},
             ),
             protocol=EL_PROTOCOL,
