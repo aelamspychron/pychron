@@ -35,7 +35,9 @@ class DeviceManager(Manager):
 
     def start_scans(self):
         if self.update_enabled:
-            self._thread = Thread(target=self._scan)
+            self._thread = Thread(
+                target=self._scan, name="{}.scan".format(self.name), daemon=True
+            )
             self._thread.start()
         else:
             self.warning(
@@ -44,9 +46,22 @@ class DeviceManager(Manager):
 
     def _scan(self):
         self.is_alive = True
-        if self.devices:
-            while self.is_alive:
-                for h in self.devices:
+        if not self.devices:
+            self.warning("no devices. update thread not running")
+            return
+
+        self.info(
+            "device update thread started. period={}s, devices={}, "
+            "scanable={}".format(
+                self.period,
+                [d.name for d in self.devices],
+                [d.name for d in self.devices if d.is_scanable],
+            )
+        )
+        exception_counters = {}
+        while self.is_alive:
+            for h in self.devices:
+                try:
                     if h.is_scanable and h.should_update():
                         if hasattr(h, "scan_func"):
                             func = h.scan_func
@@ -56,7 +71,27 @@ class DeviceManager(Manager):
                             func = getattr(h, func)
                         with h.lock_scan():
                             func()
-                time.sleep(self.period)
+                except BaseException as e:
+                    # an uncaught exception previously killed this thread,
+                    # silently freezing readback for ALL devices in this
+                    # manager. log it and keep scanning
+                    n = exception_counters.get(h.name, 0) + 1
+                    exception_counters[h.name] = n
+                    self.debug_exception()
+                    self.warning(
+                        "update of device={} raised {!r}. "
+                        "exceptions for this device={}".format(h.name, e, n)
+                    )
+                else:
+                    if exception_counters.get(h.name):
+                        self.info(
+                            "device={} updates recovered after {} "
+                            "exceptions".format(h.name, exception_counters[h.name])
+                        )
+                        exception_counters[h.name] = 0
+            time.sleep(self.period)
+
+        self.info("device update thread stopped (is_alive=False)")
 
     def stop_scans(self):
         self.is_alive = False
