@@ -228,12 +228,16 @@ class ScanableDevice(ViewableDevice):
         """
         su = True
         if self._last_update:
-            if (
-                time.time() - self._last_update
-                < self.scan_period * self.time_dict[self.scan_units]
-            ):
+            # scan_period * time_dict is in milliseconds; time.time() deltas
+            # are seconds
+            period = self.scan_period * self.time_dict[self.scan_units] / 1000.0
+            if time.time() - self._last_update < period:
                 su = False
-        self._last_update = time.time()
+        if su:
+            # only restart the window when an update actually happens.
+            # resetting unconditionally let a fast manager poll slide the
+            # window forward forever, so the device updated exactly once
+            self._last_update = time.time()
         return su
 
     def lock_scan(self):
