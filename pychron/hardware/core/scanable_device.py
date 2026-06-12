@@ -20,7 +20,7 @@ from traitsui.api import HGroup, VGroup, Item, spring, ButtonEditor
 # ============= standard library imports ========================
 import os
 import time
-from threading import Lock
+from threading import Lock, current_thread
 
 # ============= local library imports  ==========================
 from pychron.core.helpers.datetime_tools import generate_datetimestamp
@@ -62,6 +62,8 @@ class ScanableDevice(ViewableDevice):
     _scanning = Bool(False)
     _auto_started = False
     _last_update = None
+    _scan_exception_counter = 0
+    _scan_thread_logged = False
 
     def is_scanning(self):
         return self._scanning
@@ -119,11 +121,52 @@ class ScanableDevice(ViewableDevice):
 
     def _scan_(self, *args):
         if self.scan_func:
+            if not self._scan_thread_logged:
+                self._scan_thread_logged = True
+                t = current_thread()
+                self.info(
+                    "scan func={} running on thread={} (daemon={}). "
+                    "NOTE: trait/UI updates triggered by this scan happen on "
+                    "this thread, not the GUI thread".format(
+                        self.scan_func, t.name, t.daemon
+                    )
+                )
+
             try:
                 v = getattr(self, self.scan_func)()
             except AttributeError as e:
                 print("exception", e)
                 return
+            except BaseException as e:
+                # previously any other exception propagated into Timer.run and
+                # killed the scan thread silently. log it and keep scanning;
+                # bail out only if it repeats every tick
+                self._scan_exception_counter += 1
+                self.debug_exception()
+                self.warning(
+                    "scan func={} raised {!r}. consecutive exceptions={}".format(
+                        self.scan_func, e, self._scan_exception_counter
+                    )
+                )
+                if self._scan_exception_counter > 10:
+                    self.warning(
+                        "scan func={} failed {} consecutive times. "
+                        "stopping scan".format(
+                            self.scan_func, self._scan_exception_counter
+                        )
+                    )
+                    self.timer.Stop()
+                    self._scanning = False
+                    self._scan_exception_counter = 0
+                return
+            else:
+                if self._scan_exception_counter:
+                    self.info(
+                        "scan func={} recovered after {} exceptions".format(
+                            self.scan_func, self._scan_exception_counter
+                        )
+                    )
+                self._scan_exception_counter = 0
 
             if v is not None:
                 # self.debug('current scan value={}'.format(v))
@@ -161,9 +204,9 @@ class ScanableDevice(ViewableDevice):
 
             else:
                 """
-                scan func must return a value or we will stop the scan
-                since the timer runs on the main thread any long comms timeouts
-                slow user interaction
+                scan func must return a value or we will stop the scan.
+                note: the scan timer runs on a background thread (see
+                pychron.core.helpers.timer.Timer), not the main thread
                 """
                 if self._no_response_counter > 3:
                     self.timer.Stop()

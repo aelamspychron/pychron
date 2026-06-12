@@ -16,6 +16,7 @@
 
 # =============enthought library imports=======================
 # ============= standard library imports ========================
+import logging
 import time
 from threading import Event
 
@@ -24,8 +25,9 @@ from threading import Event
 # except ImportError:
 from threading import Thread
 
-
 # ============= local library imports  ==========================
+
+logger = logging.getLogger("Timer")
 
 
 class Timer(Thread):
@@ -40,6 +42,13 @@ class Timer(Thread):
         self._delay = delay / 1000.0
         self._args = args
         self._kwargs = kw
+
+        # instrumentation: expose tick health so consumers/logs can detect a
+        # dead or stalled timer thread
+        self.tick_count = 0
+        self.last_tick = None
+        self.died = False
+
         self.start()
 
     def run(self):
@@ -55,10 +64,26 @@ class Timer(Thread):
         flag.clear()
         while not flag.is_set():
             st = time.time()
-            func(*args, **kwargs)
+            try:
+                func(*args, **kwargs)
+            except BaseException:
+                # an uncaught exception previously killed this thread silently,
+                # leaving the scan stopped with no log trace
+                self.died = True
+                logger.exception(
+                    "timer func %r raised after %s ticks. timer thread stopping",
+                    func,
+                    self.tick_count,
+                )
+                raise
+            self.tick_count += 1
+            self.last_tick = time.time()
             t = max(0, self._period - time.time() + st)
             if t:
                 flag.wait(t)
+        logger.debug(
+            "timer func %r stopped cleanly after %s ticks", func, self.tick_count
+        )
 
     def wait_for_completion(self, timeout=None):
         st = time.time()

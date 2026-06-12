@@ -14,6 +14,8 @@
 # limitations under the License.
 # ===============================================================================
 
+import threading
+
 from traits.api import HasTraits, List, Str, Float, Int
 from traitsui.api import View, HGroup, Item, Group, InstanceEditor, ListEditor
 
@@ -115,11 +117,23 @@ class BaseGaugeController(HasTraits):
     def _read_pressure(self, *args, **kw):
         raise NotImplementedError
 
+    _ui_thread_warned = False
+
     def _set_gauge_pressure(self, gauge, v):
         if isinstance(gauge, str):
             gauge = self.get_gauge(gauge)
 
         if gauge is not None:
+            t = threading.current_thread()
+            if t is not threading.main_thread() and not self._ui_thread_warned:
+                self._ui_thread_warned = True
+                self.warning(
+                    "gauge pressure trait set from background thread "
+                    "'{}'. Qt editors bound to this trait (readout/bar gauge) "
+                    "will update off the GUI thread, which can silently stop "
+                    "working".format(t.name)
+                )
+
             try:
                 gauge.pressure = float(v)
                 return True
