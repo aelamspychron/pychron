@@ -23,6 +23,18 @@ from pychron.hardware.gauges.base_controller import BaseGaugeController
 class PLC2000GaugeController(BaseGaugeController, CoreDevice, ModbusMixin):
     _readback_state = None
 
+    def initialize(self, *args, **kw):
+        # BaseGaugeController.initialize does not chain to
+        # BaseCoreDevice.initialize, so the communicator was never
+        # initialized and its simulation flag stayed True forever
+        ret = super(PLC2000GaugeController, self).initialize(*args, **kw)
+        if self.communicator is not None:
+            if not self.communicator.initialize(*args, **kw):
+                # tolerate an offline PLC at startup; the reconnect logic in
+                # ModbusMixin recovers once it comes back
+                self.warning("modbus communicator failed to connect on initialize")
+        return ret
+
     def load_additional_args(self, config, *args, **kw):
         self.display_name = self.config_get(
             config, "General", "display_name", default=self.name
