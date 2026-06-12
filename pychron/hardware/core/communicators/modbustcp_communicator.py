@@ -59,6 +59,20 @@ class ModbustcpCommunicator(Communicator):
             self.simulation = False
         return connected
 
+    def test_connection(self):
+        handle = self.handle
+        if handle is None:
+            return False
+
+        try:
+            connected = handle.is_socket_open() or handle.connect()
+        except BaseException as e:
+            self.warning(f"test_connection failed: {e}")
+            connected = False
+
+        self.simulation = not connected
+        return connected
+
     def __getattr__(self, item):
         return getattr(self.handle, item)
 
