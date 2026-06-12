@@ -19,6 +19,9 @@ from pychron.hardware.core.core_device import CoreDevice
 from pychron.hardware.core.modbus import ModbusMixin
 from pychron.hardware.gauges.base_controller import BaseGaugeController
 
+# log a heartbeat summary every N update cycles
+HEARTBEAT_INTERVAL = 60
+
 
 class PLC2000GaugeController(BaseGaugeController, CoreDevice, ModbusMixin):
     _readback_state = None
@@ -45,20 +48,22 @@ class PLC2000GaugeController(BaseGaugeController, CoreDevice, ModbusMixin):
         return True
 
     def get_pressures(self, *args, **kw):
+        kw["force"] = True
+        return super(PLC2000GaugeController, self).get_pressures(*args, **kw)
+
+    def update_pressures(self, verbose=False):
         now = time.time()
         last = self._last_update_time
         self._last_update_time = now
         self._update_cycle += 1
-        gap = f", gap={now - last:0.1f}s" if last else ""
-        self.debug(f"get_pressures cycle={self._update_cycle}{gap}")
 
-        kw["force"] = True
-        st = time.time()
-        ret = super(PLC2000GaugeController, self).get_pressures(*args, **kw)
-        self.debug(
-            f"get_pressures cycle={self._update_cycle} complete "
-            f"in {time.time() - st:0.3f}s: {ret}"
-        )
+        ret = super(PLC2000GaugeController, self).update_pressures(verbose=verbose)
+
+        # periodic heartbeat instead of logging every cycle. confirms the
+        # update loop is alive and shows current values without spamming
+        if self._update_cycle == 1 or self._update_cycle % HEARTBEAT_INTERVAL == 0:
+            gap = f", gap={now - last:0.1f}s" if last else ""
+            self.debug(f"heartbeat cycle={self._update_cycle}{gap}: {ret}")
         return ret
 
     def _record_readback(self, gname, register, pressure):
@@ -131,11 +136,12 @@ class PLC2000GaugeController(BaseGaugeController, CoreDevice, ModbusMixin):
                 self.debug_exception()
                 self.debug(f"failed reading register={register}, error={e}")
 
-            self.debug(
-                f"read gauge={gname} channel={channel} "
-                f"register={register} pressure={pressure!r} "
-                f"elapsed={time.time() - st:0.3f}s"
-            )
+            if verbose:
+                self.debug(
+                    f"read gauge={gname} channel={channel} "
+                    f"register={register} pressure={pressure!r} "
+                    f"elapsed={time.time() - st:0.3f}s"
+                )
 
             self._record_readback(gname, register, pressure)
 
