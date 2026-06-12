@@ -63,9 +63,17 @@ class GaugeManager(DeviceManager):
                 )
                 return
             else:
+                try:
+                    pressures = di.get_pressures(verbose=True)
+                except BaseException as e:
+                    self.warning(
+                        "Failed getting pressures from name={}, "
+                        "display_name={}: {}".format(di.name, di.display_name, e)
+                    )
+                    pressures = None
                 self.debug(
                     "Get pressures name={}, display_name={}, {}".format(
-                        di.name, di.display_name, di.get_pressures(verbose=True)
+                        di.name, di.display_name, pressures
                     )
                 )
         else:

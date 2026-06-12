@@ -114,6 +114,11 @@ class MKSSRG(CoreDevice):
             self.gauges[0].pressure = p
         return p
 
+    def get_pressures(self, force=False, verbose=False):
+        """Match the BaseGaugeController API expected by GaugeManager."""
+        self.update_pressures(verbose=verbose)
+        return [g.pressure for g in self.gauges]
+
     def gauge_view(self):
         return View(
             Group(
@@ -139,7 +144,9 @@ class MKSSRG(CoreDevice):
         try:
             return float(cleaned)
         except (TypeError, ValueError) as e:
-            self.warning("failed parsing SRG-3 pressure response {!r}: {}".format(resp, e))
+            self.warning(
+                "failed parsing SRG-3 pressure response {!r}: {}".format(resp, e)
+            )
             return None
 
 
