@@ -22,6 +22,8 @@ from pychron.hardware.gauges.base_controller import BaseGaugeController
 
 class PLC2000GaugeController(BaseGaugeController, CoreDevice, ModbusMixin):
     _readback_state = None
+    _update_cycle = 0
+    _last_update_time = None
 
     def initialize(self, *args, **kw):
         # BaseGaugeController.initialize does not chain to
@@ -43,8 +45,21 @@ class PLC2000GaugeController(BaseGaugeController, CoreDevice, ModbusMixin):
         return True
 
     def get_pressures(self, *args, **kw):
+        now = time.time()
+        last = self._last_update_time
+        self._last_update_time = now
+        self._update_cycle += 1
+        gap = f", gap={now - last:0.1f}s" if last else ""
+        self.debug(f"get_pressures cycle={self._update_cycle}{gap}")
+
         kw["force"] = True
-        return super(PLC2000GaugeController, self).get_pressures(*args, **kw)
+        st = time.time()
+        ret = super(PLC2000GaugeController, self).get_pressures(*args, **kw)
+        self.debug(
+            f"get_pressures cycle={self._update_cycle} complete "
+            f"in {time.time() - st:0.3f}s: {ret}"
+        )
+        return ret
 
     def _record_readback(self, gname, register, pressure):
         """Edge-triggered logging of per-gauge readback health.
@@ -109,17 +124,18 @@ class PLC2000GaugeController(BaseGaugeController, CoreDevice, ModbusMixin):
         if name is not None:
             # register = channel-1
             register = int(channel) - 1
+            st = time.time()
             try:
                 pressure = self._read_float(register)
             except BaseException as e:
                 self.debug_exception()
                 self.debug(f"failed reading register={register}, error={e}")
 
-            if verbose:
-                self.debug(
-                    f"read gauge={gname} channel={channel} "
-                    f"register={register} pressure={pressure!r}"
-                )
+            self.debug(
+                f"read gauge={gname} channel={channel} "
+                f"register={register} pressure={pressure!r} "
+                f"elapsed={time.time() - st:0.3f}s"
+            )
 
             self._record_readback(gname, register, pressure)
 
