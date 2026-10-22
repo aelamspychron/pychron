@@ -185,17 +185,56 @@ class EPC3000(CoreDevice, ModbusMixin):
             **kw,
         )
 
+    # furnace controller api (IFurnaceController / BaseFurnaceManager)
+    def test_connection(self):
+        """
+        return (connected, error) as expected by BaseFurnaceManager and the
+        experiment executor's pre execute check
+        """
+        if self.communicator is None:
+            return False, "no communicator"
+
+        if self.communicator.simulation:
+            return False, "communicator in simulation mode"
+
+        pv = self._read_scaled(self.process_value_address, verbose=True)
+        if pv is None:
+            return False, "failed reading process value"
+        return True, None
+
+    def read_setpoint(self, **kw):
+        return self.get_setpoint(**kw)
+
+    def read_temperature(self, force=False, **kw):
+        return self.get_process_value(**kw)
+
+    def read_output_percent(self, force=False, **kw):
+        return self.get_output(**kw)
+
+    def get_response(self, force=False, **kw):
+        return self.get_process_value(**kw)
+
+    def set_pid(self, param_str):
+        self.warning(
+            "set_pid not supported by EPC3000 driver. ignoring {}".format(param_str)
+        )
+        return False
+
     def set_setpoint(self, v):
         if self.setpoint_address is None:
             self.debug("setpoint_address not set")
             return
 
-        scale = 10 ** self.decimal_places if self.decimal_places else 1
+        scale = 10**self.decimal_places if self.decimal_places else 1
         raw = int(round(v * scale))
         if raw < 0:
             raw += 0x10000
         raw &= 0xFFFF
-        self.debug("set setpoint addr={}, value={}, raw={}".format(self.setpoint_address, v, raw))
+        self.debug(
+            "set setpoint addr={}, value={}, raw={}".format(
+                self.setpoint_address, v, raw
+            )
+        )
         self._write_register(int(self.setpoint_address), raw)
 
     def _setpoint_changed(self, new):
@@ -256,7 +295,9 @@ class EPC3000(CoreDevice, ModbusMixin):
         try:
             raw = result.registers[0]
         except (AttributeError, IndexError):
-            self.warning("invalid modbus result for address {}: {!r}".format(address, result))
+            self.warning(
+                "invalid modbus result for address {}: {!r}".format(address, result)
+            )
             return None
 
         # 16-bit two's complement
@@ -265,7 +306,7 @@ class EPC3000(CoreDevice, ModbusMixin):
 
         if decimal_places is None:
             decimal_places = self.decimal_places
-        scale = 10 ** decimal_places if decimal_places else 1
+        scale = 10**decimal_places if decimal_places else 1
         return raw / scale
 
 
