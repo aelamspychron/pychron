@@ -62,11 +62,12 @@ class HeaterMixin(OnOffMixin):
         raise NotImplementedError
 
     def update(self):
-        if self.onoff_state:
-            v = self.read_readback()
-            if v is not None:
-                self.readback = v
-                self.graph.record(v)
+        # read temperature regardless of on/off state so the display
+        # tracks the heater cooling down after it is turned off
+        v = self.read_readback()
+        if v is not None:
+            self.readback = v
+            self.graph.record(v)
 
     def _use_pid_changed(self, v):
         self.debug("set use_pid={}".format(v))
@@ -99,6 +100,11 @@ class HeaterMixin(OnOffMixin):
 
 
 class PLC2000Heater(CoreDevice, ModbusMixin, HeaterMixin):
+    # HeaterManager only updates scanable devices. scan without a [Scan]
+    # config section; [Scan] enabled=False still turns it off
+    is_scanable = Bool(True)
+    scan_func = "update"
+
     setpoint_address = Int
     readback_address = Int
     use_pid_address = Int

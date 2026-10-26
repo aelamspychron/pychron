@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ===============================================================================
-from traits.api import Int, Float
+from traits.api import Int, Float, Bool
 from traitsui.api import View, Item, UItem, HGroup, VGroup
 
 from pychron.core.ui.lcd_editor import LCDEditor
@@ -97,6 +97,9 @@ class EPC3000(CoreDevice, ModbusMixin):
     output = Float
 
     scan_func = "get_process_value"
+    # HeaterManager only updates scanable devices. scan without a [Scan]
+    # config section; [Scan] enabled=False still turns it off
+    is_scanable = Bool(True)
 
     def load_additional_args(self, config):
         for attr in ("process_value", "setpoint", "output", "working_setpoint"):

@@ -63,14 +63,17 @@ class DeviceManager(Manager):
             for h in self.devices:
                 try:
                     if h.is_scanable and h.should_update():
-                        if hasattr(h, "scan_func"):
-                            func = h.scan_func
-                        else:
-                            func = "update"
+                        # scan_func defaults to None on ScanableDevice, so a
+                        # hasattr check alone would try to call None
+                        func = getattr(h, "scan_func", None) or "update"
                         if isinstance(func, str):
                             func = getattr(h, func)
                         with h.lock_scan():
-                            func()
+                            v = func()
+                            # devices publish readings (e.g. process_value)
+                            # from _scan_hook, same as their own scan timer
+                            if v is not None:
+                                h._scan_hook(v)
                 except BaseException as e:
                     # an uncaught exception previously killed this thread,
                     # silently freezing readback for ALL devices in this
