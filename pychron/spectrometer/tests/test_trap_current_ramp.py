@@ -96,6 +96,27 @@ class TrapCurrentRampTestCase(unittest.TestCase):
         self.assertEqual(writes, [105.0, 110.0, 115.0, 120.0, 125.0])
         self.assertTrue(warnings)
 
+    def test_transient_readback_above_setpoint_ramping_down(self):
+        # log 14:17:21: He -> Ar, trap voltage just changed, readback spiked to 459
+        writes, warnings = self._ramp(400.0, 459.173, 200.0, step=10)
+        self.assertEqual(writes[0], 390.0)
+        self.assertTrue(max(writes) < 400.0)
+        self.assertEqual(writes[-1], 200.0)
+        self.assertTrue(warnings)
+
+    def test_transient_readback_below_setpoint_ramping_up(self):
+        # log 14:16:16: setpoint 125, readback dipped to 107.5, target 400
+        writes, _ = self._ramp(125.0, 107.521, 400.0, step=20)
+        self.assertEqual(writes[0], 145.0)
+        self.assertTrue(min(writes) > 125.0)
+        self.assertEqual(writes[-1], 400.0)
+
+    def test_writes_are_rounded(self):
+        writes, _ = self._ramp(107.521, 107.521, 400.0, step=20)
+        for w in writes:
+            self.assertEqual(w, round(w, 3))
+        self.assertIn(147.521, writes)
+
     def test_setpoint_tolerance_is_configurable(self):
         writes, _ = self._ramp(200.0, 190.0, 125.0, step=25, setpoint_tol=5)
         self.assertEqual(writes, [165.0, 125.0])

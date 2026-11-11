@@ -434,6 +434,7 @@ class BaseSpectrometer(SpectrometerDevice):
                     "ramp_period",
                     "ramp_tolerance",
                     "setpoint_tolerance",
+                    "voltage_settle",
                     "voltage",
                 ):
                     if config.has_option(section, attr):

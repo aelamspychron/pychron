@@ -668,6 +668,16 @@ class ThermoSpectrometer(BaseSpectrometer):
                                 )
                             else:
                                 setattr(self.source, "trap_{}".format(tag), v)
+                                # changing the trap voltage disturbs the trap current
+                                # readback for a moment (e.g. 400 -> 459). let it
+                                # settle before the current is read and ramped
+                                settle = trap.get("voltage_settle", 1)
+                                if settle:
+                                    self.debug(
+                                        "waiting {}s for trap current to settle "
+                                        "after trap voltage change".format(settle)
+                                    )
+                                    time.sleep(settle)
 
                 # set the mftable
                 magnet = config["magnet"]
@@ -681,14 +691,18 @@ class ThermoSpectrometer(BaseSpectrometer):
                 self.debug("======== Configuration Finished ========")
                 self.source.sync_parameters()
 
-    def _get_trap_ramp_start(self, setpoint, readback, setpoint_tol):
+    def _get_trap_ramp_start(self, setpoint, readback, setpoint_tol, target):
         """
         Choose where to start the trap current ramp.
 
         Prefer the setpoint: starting from the readback re-writes it as the
-        setpoint (e.g. 200 -> 201 -> ... -> 125). But if the readback disagrees
-        with the setpoint by more than setpoint_tol, the trap isn't where the
-        setpoint says (e.g. setpoint 200, readback 100), so start from the readback.
+        setpoint (e.g. 200 -> 201 -> ... -> 125). If the readback disagrees with
+        the setpoint by more than setpoint_tol, start from whichever is closer to
+        the target, so the ramp never moves the setpoint away from the target:
+
+        - setpoint 200, readback 100, target 125 -> 100 (trap really is at 100)
+        - setpoint 400, readback 459, target 200 -> 400 (readback is a transient
+          from the trap voltage change just before)
         """
         if setpoint is None and readback is None:
             return None
@@ -700,11 +714,17 @@ class ThermoSpectrometer(BaseSpectrometer):
             return readback
 
         if abs(setpoint - readback) > setpoint_tol:
+            if abs(target - readback) < abs(target - setpoint):
+                start, name = readback, "readback"
+            else:
+                start, name = setpoint, "setpoint"
             self.warning(
                 "trap current setpoint={} and readback={} differ by more than {}. "
-                "ramping from readback".format(setpoint, readback, setpoint_tol)
+                "ramping from {} (closer to target {})".format(
+                    setpoint, readback, setpoint_tol, name, target
+                )
             )
-            return readback
+            return start
         return setpoint
 
     def _ramp_trap_current(
@@ -729,7 +749,7 @@ class ThermoSpectrometer(BaseSpectrometer):
 
             setpoint = self.source.read_trap_current_setpoint()
             readback = self.source.read_trap_current_readback()
-            current = self._get_trap_ramp_start(setpoint, readback, setpoint_tol)
+            current = self._get_trap_ramp_start(setpoint, readback, setpoint_tol, v)
             if current is None:
                 self.warning(
                     "could not read trap current setpoint or readback. "
@@ -755,6 +775,8 @@ class ThermoSpectrometer(BaseSpectrometer):
                         prog = open_progress(int(steps))
 
                     def func(x):
+                        # avoid float noise like 147.52100000000002
+                        x = round(x, 3)
                         self.source.trap_current = x
                         if show_progress:
                             invoke_in_main_thread(
