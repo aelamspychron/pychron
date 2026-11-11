@@ -177,7 +177,7 @@ class BaseSpectrometer(SpectrometerDevice):
         if it is None:
             it = self.integration_time
 
-        self.debug(f'update period {it}')
+        self.debug(f"update period {it}")
         return it
 
     def correct_dac(self, det, dac, current=True):
@@ -433,6 +433,7 @@ class BaseSpectrometer(SpectrometerDevice):
                     "ramp_step",
                     "ramp_period",
                     "ramp_tolerance",
+                    "setpoint_tolerance",
                     "voltage",
                 ):
                     if config.has_option(section, attr):
@@ -488,10 +489,12 @@ class BaseSpectrometer(SpectrometerDevice):
             with open(p, "r") as f:
 
                 sample = f.read(10)
-        
+
                 # Use the Sniffer to analyze the sample
                 try:
-                    dialect = csv.Sniffer().sniff(sample, delimiters=[',', ';', '|', '\\t'])
+                    dialect = csv.Sniffer().sniff(
+                        sample, delimiters=[",", ";", "|", "\\t"]
+                    )
                     delimiter = dialect.delimiter
                     f.seek(0)
                     reader = csv.reader(f, delimiter=delimiter)
@@ -502,7 +505,7 @@ class BaseSpectrometer(SpectrometerDevice):
                         mws = None
                 except csv.Error:
                     print("Could not determine delimiter, defaulting to comma.")
-                    
+
         elif os.path.isfile(yp):
             self.info('loading "molecular_weights.yaml" file. {}'.format(yp))
             try:

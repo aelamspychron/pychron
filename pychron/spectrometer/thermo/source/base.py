@@ -22,7 +22,6 @@ from traitsui.api import View, Item, RangeEditor, VGroup
 # ============= local library imports  ==========================
 from pychron.spectrometer.base_source import BaseSource
 
-
 # ============= standard library imports ========================
 
 
@@ -55,6 +54,29 @@ class ThermoSource(BaseSource):
 
     def read_trap_current(self):
         return self._read_value("GetParameter Trap Current Readback", "_trap_current")
+
+    def read_trap_current_setpoint(self):
+        """
+        Read the trap current setpoint ("Trap Current Set"), not the readback.
+        Returns None if it cannot be read (unlike _read_value, which returns 0).
+        """
+        return self._ask_float("GetParameter Trap Current Set")
+
+    def read_trap_current_readback(self):
+        """
+        Like read_trap_current, but returns None if it cannot be read instead of 0.
+        """
+        v = self._ask_float("GetParameter Trap Current Readback")
+        if v is not None:
+            self._trap_current = v
+        return v
+
+    def _ask_float(self, cmd):
+        r = self.ask(cmd, verbose=True)
+        try:
+            return round(float(r), 3)
+        except (ValueError, TypeError):
+            return None
 
     def read_y_symmetry(self):
         return self._read_value("GetParameter Y-Symmetry Set", "_y_symmetry")

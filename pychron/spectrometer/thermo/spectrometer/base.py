@@ -658,7 +658,13 @@ class ThermoSpectrometer(BaseSpectrometer):
                                 tol = trap.get("ramp_tolerance", 10)
                                 use_ramp = use_ramp and trap.get("use_ramp", True)
                                 self._ramp_trap_current(
-                                    v, step, period, use_ramp, tol, ramp_confirm
+                                    v,
+                                    step,
+                                    period,
+                                    use_ramp,
+                                    tol,
+                                    ramp_confirm,
+                                    setpoint_tol=trap.get("setpoint_tolerance"),
                                 )
                             else:
                                 setattr(self.source, "trap_{}".format(tag), v)
@@ -675,14 +681,60 @@ class ThermoSpectrometer(BaseSpectrometer):
                 self.debug("======== Configuration Finished ========")
                 self.source.sync_parameters()
 
+    def _get_trap_ramp_start(self, setpoint, readback, setpoint_tol):
+        """
+        Choose where to start the trap current ramp.
+
+        Prefer the setpoint: starting from the readback re-writes it as the
+        setpoint (e.g. 200 -> 201 -> ... -> 125). But if the readback disagrees
+        with the setpoint by more than setpoint_tol, the trap isn't where the
+        setpoint says (e.g. setpoint 200, readback 100), so start from the readback.
+        """
+        if setpoint is None and readback is None:
+            return None
+        if readback is None:
+            self.debug("could not read trap current readback. using setpoint")
+            return setpoint
+        if setpoint is None:
+            self.debug("could not read trap current setpoint. using readback")
+            return readback
+
+        if abs(setpoint - readback) > setpoint_tol:
+            self.warning(
+                "trap current setpoint={} and readback={} differ by more than {}. "
+                "ramping from readback".format(setpoint, readback, setpoint_tol)
+            )
+            return readback
+        return setpoint
+
     def _ramp_trap_current(
-        self, v, step, period, use_ramp=False, tol=10, confirm=False
+        self,
+        v,
+        step,
+        period,
+        use_ramp=False,
+        tol=10,
+        confirm=False,
+        setpoint_tol=None,
     ):
+        """
+        tol: don't ramp if the start is within tol of v; set v directly instead
+        setpoint_tol: max setpoint/readback disagreement before ramping from the
+            readback. defaults to tol
+        """
         if use_ramp:
             self.debug("ramping trap current")
-            current = self.source.read_trap_current()
+            if setpoint_tol is None:
+                setpoint_tol = tol
+
+            setpoint = self.source.read_trap_current_setpoint()
+            readback = self.source.read_trap_current_readback()
+            current = self._get_trap_ramp_start(setpoint, readback, setpoint_tol)
             if current is None:
-                self.debug("could not read current trap. skipping ramp")
+                self.warning(
+                    "could not read trap current setpoint or readback. "
+                    "skipping ramp; trap current not set to {}".format(v)
+                )
                 return
 
             if abs(v - current) >= tol:
@@ -718,12 +770,21 @@ class ThermoSpectrometer(BaseSpectrometer):
                             current, v, step, period
                         )
                     )
-                    r.ramp(func, current, v, step, period)
+                    r.ramp(func, current, v, step, period, include_start=False)
                     if show_progress:
                         prog.close()
                     return True
-            else:
+            elif setpoint is not None and abs(setpoint - v) < 1e-3:
                 self.debug("trap current is up-to-date")
+                return True
+            else:
+                # close enough to not need a ramp, but the setpoint isn't v yet
+                self.debug(
+                    "trap current {} within {} of {}. setting directly".format(
+                        current, tol, v
+                    )
+                )
+                self.source.trap_current = v
                 return True
 
     # ===============================================================================

@@ -20,7 +20,6 @@ from __future__ import absolute_import
 import math
 import time
 
-
 # ============= standard library imports ========================
 # ============= local library imports  ==========================
 
@@ -30,7 +29,14 @@ def calculate_steps(duration, period=1):
 
 
 class StepRamper(object):
-    def ramp(self, func, start, end, step, period=1, tolerance=None):
+    def ramp(
+        self, func, start, end, step, period=1, tolerance=None, include_start=True
+    ):
+        """
+        include_start: if False, the first value passed to func is start+step.
+        Use when start is already the device's value, so re-sending it is
+        redundant.
+        """
         if tolerance is None:
             tolerance = abs(step)
 
@@ -38,7 +44,7 @@ class StepRamper(object):
             if step > 0:
                 step = -step
 
-        current = start
+        current = start if include_start else start + step
         canceled = False
         while 1:
             ct = time.time()
