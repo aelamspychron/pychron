@@ -42,6 +42,30 @@ class ThermoMagnet(BaseMagnet):
     # detector_protection_threshold = Float(0.1)  # DAC units
     beam_blank_threshold = Float(0.1)  # DAC units
 
+    def _get_protected_detector(self, name):
+        """
+        find the detector for a [Protection] detectors entry. accepts the pychron
+        name ("AX(CDD)"), the Qtegra deflection name ("AX (CDD)"), and ignores
+        surrounding whitespace ("H2, AX(CDD)" in config.cfg)
+        """
+        name = name.strip()
+        det = self.spectrometer.get_detector(name)
+        if det is None:
+            key = name.replace(" ", "")
+            det = next(
+                (
+                    d
+                    for d in self.spectrometer.detectors
+                    if key
+                    in (
+                        d.name.replace(" ", ""),
+                        (d.deflection_name or "").replace(" ", ""),
+                    )
+                ),
+                None,
+            )
+        return det
+
     # ===============================================================================
     # ##positioning
     # ===============================================================================
@@ -72,21 +96,28 @@ class ThermoMagnet(BaseMagnet):
             if verbose:
                 self.debug("Checking detector protection. dv={:0.5f}".format(dv))
             for pd in self.protected_detectors:
-                det = self.spectrometer.get_detector(pd)
+                det = self._get_protected_detector(pd)
+                if det is None:
+                    self.warning(
+                        'Invalid detector to protect: "{}". detectors={}'.format(
+                            pd, [d.name for d in self.spectrometer.detectors]
+                        )
+                    )
+                    continue
+
                 if verbose:
                     self.debug(
                         'Checking detector "{}". '
                         "Protection Threshold: {} (V)".format(
-                            pd, det.protection_threshold
+                            det.name, det.protection_threshold
                         )
                     )
-                if det is None:
-                    self.warning("Invalid detector to protect: {}".format(pd))
-                    continue
                 if det.protection_threshold and dv > det.protection_threshold:
-                    self.ask("ProtectDetector {},On".format(pd), verbose=verbose)
-                    resp = self.ask("GetDeflection {}".format(pd), verbose=verbose)
-                    unprotect.append(pd)
+                    # Qtegra's name for the detector, e.g. "AX (CDD)" for "AX(CDD)"
+                    qname = det.deflection_name or det.name
+                    self.ask("ProtectDetector {},On".format(qname), verbose=verbose)
+                    resp = self.ask("GetDeflection {}".format(qname), verbose=verbose)
+                    unprotect.append(qname)
                     if verbose:
                         self.debug("Protected = {}".format(resp))
 
