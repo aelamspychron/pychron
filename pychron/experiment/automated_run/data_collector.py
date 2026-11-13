@@ -23,6 +23,7 @@ from apptools.preferences.preference_binding import bind_preference
 from traits.api import Any, List, CInt, Int, Bool, Enum, Str, Instance
 
 from pychron.envisage.consoleable import Consoleable
+from pychron.experiment.automated_run.plot_limits import extend_xmax
 from pychron.pychron_constants import AR_AR, SIGNAL, BASELINE, WHIFF, SNIFF
 
 
@@ -376,6 +377,10 @@ class DataCollector(Consoleable):
                 update_y_limits=True,
                 ypadding=ypadding,
             )
+            # keep the point visible if the run took longer than estimated
+            xmax = extend_xmax(g.get_x_limits()[1], x)
+            if xmax is not None:
+                g.set_x_limits(max_=xmax)
             if fit:
                 g.set_fit(fit, plotid=pid, series=fit_series)
 

@@ -26,7 +26,7 @@ import weakref
 from pprint import pformat
 from threading import Event as TEvent, Thread
 
-from numpy import inf as Inf, polyfit, linspace, polyval, array
+from numpy import polyfit, linspace, polyval, array
 from traits.api import (
     Any,
     Str,
@@ -56,6 +56,7 @@ from pychron.core.yaml import yload
 from pychron.experiment import ExtractionException
 from pychron.experiment.automated_run.hop_util import parse_hops
 from pychron.experiment.automated_run.persistence_spec import PersistenceSpec
+from pychron.experiment.automated_run.plot_limits import calculate_xmax
 
 from pychron.experiment.conditional.conditional import (
     TruncationConditional,
@@ -2931,13 +2932,18 @@ anaylsis_type={}
             self.plot_panel.integration_time = self._integration_seconds
             self.plot_panel.set_ncounts(ncounts)
 
+            # x is wall-clock seconds since time zero, so time spent before this
+            # collection (e.g. a peak center) must be included in the x limits
+            elapsed = time.time() - starttime if starttime else 0
+            xlimits = (elapsed, ncounts * period)
+
             if grpname == "sniff":
-                self._setup_isotope_graph(starttime_offset, color, grpname)
-                self._setup_sniff_graph(starttime_offset, color)
+                self._setup_isotope_graph(starttime_offset, color, grpname, xlimits)
+                self._setup_sniff_graph(starttime_offset, color, xlimits)
             elif grpname == "baseline":
-                self._setup_baseline_graph(starttime_offset, color)
+                self._setup_baseline_graph(starttime_offset, color, xlimits)
             else:
-                self._setup_isotope_graph(starttime_offset, color, grpname)
+                self._setup_isotope_graph(starttime_offset, color, grpname, xlimits)
 
         # time.sleep(0.5)
         with self.persister.writer_ctx():
@@ -2973,24 +2979,26 @@ anaylsis_type={}
             idx = graph.get_plotid_by_ytitle(iso)
         return idx
 
-    def _update_limits(self, graph, starttime_offset):
-        # update limits
+    def _update_limits(self, graph, starttime_offset, xlimits=None):
+        """
+        xlimits: (elapsed, remaining) seconds. elapsed is the wall-clock time since
+        time zero (the x of the next point), remaining the expected duration of
+        the collection
+        """
         mi, ma = graph.get_x_limits()
-        max_ = ma
         min_ = mi
 
-        tc = self.plot_panel.total_seconds
-        if tc > ma or ma == Inf:
-            max_ = tc
+        elapsed, remaining = xlimits or (0, 0)
+        max_ = calculate_xmax(ma, self.plot_panel.total_seconds, elapsed, remaining)
 
         if starttime_offset > mi:
             min_ = -starttime_offset
 
-        graph.set_x_limits(min_=min_, max_=max_ * 1.25)
+        graph.set_x_limits(min_=min_, max_=max_)
 
-    def _setup_baseline_graph(self, starttime_offset, color):
+    def _setup_baseline_graph(self, starttime_offset, color, xlimits=None):
         graph = self.plot_panel.baseline_graph
-        self._update_limits(graph, starttime_offset)
+        self._update_limits(graph, starttime_offset, xlimits)
 
         for det in self._active_detectors:
             idx = graph.get_plotid_by_ytitle(det.name)
@@ -3010,9 +3018,9 @@ anaylsis_type={}
                         add_tools=False,
                     )
 
-    def _setup_sniff_graph(self, starttime_offset, color):
+    def _setup_sniff_graph(self, starttime_offset, color, xlimits=None):
         graph = self.plot_panel.sniff_graph
-        self._update_limits(graph, starttime_offset)
+        self._update_limits(graph, starttime_offset, xlimits)
 
         series = self.collector.series_idx
         for k, iso in self.isotope_group.items():
@@ -3034,7 +3042,7 @@ anaylsis_type={}
                         add_tools=False,
                     )
 
-    def _setup_isotope_graph(self, starttime_offset, color, grpname):
+    def _setup_isotope_graph(self, starttime_offset, color, grpname, xlimits=None):
         """
         execute in main thread is necessary.
         set the graph limits and construct the necessary series
@@ -3042,7 +3050,7 @@ anaylsis_type={}
 
         """
         graph = self.plot_panel.isotope_graph
-        self._update_limits(graph, starttime_offset)
+        self._update_limits(graph, starttime_offset, xlimits)
 
         regressing = grpname != "sniff"
         series = self.collector.series_idx
